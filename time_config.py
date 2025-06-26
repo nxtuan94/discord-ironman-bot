@@ -71,3 +71,26 @@ def setup_timeconfig(bot):
             await ctx.send(
                 f"⚠️ Lỗi: {str(e)}.\nVí dụ:\n- `!set_time motivate 5:30 -> 23:00`\n"
                 "- `!set_time reminder 5:00`\n- `!set_time motivate loop 2`")
+
+def setup_showtime(bot):
+    @bot.command(name="show_time")
+    async def show_time(ctx):
+        config = load_config()
+        msg = "**⏰ Thời gian đã cài đặt:**\n"
+
+        for key in sorted(config.keys()):
+            if key.endswith("_start"):
+                base = key.replace("_start", "")
+                start = config.get(f"{base}_start")
+                end = config.get(f"{base}_end", "???")
+                msg += f"• `{base}`: {start} → {end}\n"
+            elif key.endswith("_time"):
+                base = key.replace("_time", "")
+                time = config.get(key)
+                msg += f"• `{base}`: {time}\n"
+            elif key.endswith("_loop"):
+                base = key.replace("_loop", "")
+                loop = config.get(key)
+                msg += f"• `{base}`: mỗi {loop} giờ\n"
+
+        await ctx.send(msg)
