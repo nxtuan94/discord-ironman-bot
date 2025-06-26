@@ -12,6 +12,7 @@ def setup_help(bot):
             "• `!commands` – Xem danh sách lệnh 📜\n"
             "• `!motivate` – Gửi 1 câu quote động lực 💪\n"
             "• `!countdown` – Số ngày còn lại đến Ironman ⏳\n"
+            "• `!show_time` – Xem thời gian đã đặt 🕒\n"
             "• `!set_time` – Đặt thời gian cho các lệnh 🕒\n"
             "• `!set_time motivate 5:30 -> 22:00` - Đặt thời gian động lực từ 5:30 đến 22:00 🕒\n"
             "• `!set_time motivate loop 2` – Đặt chu kỳ lặp động lực mỗi 2 giờ 🔄\n"
