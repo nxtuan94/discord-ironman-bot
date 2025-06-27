@@ -2,11 +2,21 @@ import os
 import zipfile
 import datetime
 import pickle
+import base64
 
 from googleapiclient.discovery import build
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from googleapiclient.http import MediaFileUpload
+
+
+def restore_token_from_base64():
+    with open("token_drive_base64.txt", "r") as f:
+        b64data = f.read()
+
+    with open("token_drive.pickle", "wb") as f:
+        f.write(base64.b64decode(b64data))
+
 
 # Cấu hình OAuth
 SCOPES = ['https://www.googleapis.com/auth/drive.file']
@@ -24,6 +34,7 @@ def create_backup_zip():
 
 
 def login_google_drive():
+    restore_token_from_base64()
     creds = None
     if os.path.exists(TOKEN_FILE):
         with open(TOKEN_FILE, 'rb') as token:
@@ -59,16 +70,21 @@ def upload_to_drive(file_path):
         print("⚠ Không thể xác thực với Google Drive.")
         return None
 
-    file_metadata = {
-        'name': os.path.basename(file_path),
-        'parents': [FOLDER_ID]
-    }
+    try:
+        file_metadata = {
+            'name': os.path.basename(file_path),
+            'parents': [FOLDER_ID]
+        }
 
-    media = MediaFileUpload(file_path, mimetype='application/zip')
+        media = MediaFileUpload(file_path, mimetype='application/zip')
 
-    uploaded = service.files().create(body=file_metadata,
-                                      media_body=media,
-                                      fields='id').execute()
+        uploaded = service.files().create(body=file_metadata,
+                                          media_body=media,
+                                          fields='id').execute()
 
-    print(f'✅ File đã upload lên thư mục. File ID: {uploaded.get("id")}')
-    return uploaded.get("id")
+        print(f'✅ File đã upload lên thư mục. File ID: {uploaded.get("id")}')
+        return uploaded.get("id")
+    finally:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+            print(f'🗑️ Đã xóa file tạm: {file_path}')
