@@ -4,7 +4,8 @@ from countdown import setup_countdown
 from checkin import setup_checkin
 from report import setup_report
 from help import setup_help, setup_admin
-from time_config import setup_timeconfig, setup_showtime
+from time_config import setup_timeconfig
+from rank import setup_rank
 
 
 async def setup_all(bot):
@@ -15,4 +16,4 @@ async def setup_all(bot):
     setup_help(bot)
     setup_admin(bot)
     setup_timeconfig(bot)
-    setup_showtime(bot)
+    setup_rank(bot)

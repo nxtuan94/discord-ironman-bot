@@ -1,76 +1,113 @@
-# checkin.py
-import os
-import json
 import discord
 from discord.ext import commands
 from utils import get_now
-
-CHECKIN_FILE = "checkin.json"
-
-
-def load_checkin():
-    if not os.path.exists(CHECKIN_FILE) or os.path.getsize(CHECKIN_FILE) == 0:
-        return {}
-    with open(CHECKIN_FILE, "r") as f:
-        try:
-            return json.load(f)
-        except:
-            return {}
-
-
-def save_checkin(data):
-    with open(CHECKIN_FILE, "w") as f:
-        json.dump(data, f)
+from database import add_user, add_checkin, get_checkin_images_by_date, get_all_users
+from config import YOUR_USER_ID
 
 
 def setup_checkin(bot):
 
     @bot.command()
-    async def checkin(ctx):
-        today = get_now().strftime("%Y-%m-%d")
-        user_id = str(ctx.author.id)
+    async def checkin(ctx, *args):
+        from utils import get_now
+        from database import add_user, add_checkin
+        import re
+        from datetime import datetime
 
-        if not ctx.message.attachments:
-            await ctx.send("❗ Bạn phải đính kèm ít nhất 1 ảnh để check-in.")
+        image_urls = []
+        for attachment in ctx.message.attachments:
+            if attachment.content_type and attachment.content_type.startswith(
+                    "image/"):
+                image_urls.append(attachment.url)
+
+        if not image_urls:
+            await ctx.send("⚠ Bạn cần gửi ít nhất 1 ảnh để check-in.")
             return
 
-        checkin_data = load_checkin()
-        if today not in checkin_data:
-            checkin_data[today] = {}
+        # Phân tích args
+        member = None
+        checkin_date = get_now().strftime("%Y-%m-%d")
 
-        if user_id not in checkin_data[today]:
-            checkin_data[today][user_id] = []
+        if len(args) == 1:
+            # Trường hợp !checkin DD-MM-YYYY (tự checkin lùi ngày)
+            if re.match(r"\d{2}-\d{2}-\d{4}", args[0]):
+                if ctx.author.id != YOUR_USER_ID:
+                    await ctx.send("❌ Bạn không có quyền check-in lùi ngày.")
+                    return
+                try:
+                    d = datetime.strptime(args[0], "%d-%m-%Y")
+                    checkin_date = d.strftime("%Y-%m-%d")
+                except:
+                    await ctx.send(
+                        "⚠ Định dạng ngày không hợp lệ. Dùng DD-MM-YYYY.")
+                    return
+            else:
+                # Trường hợp !checkin @user
+                member = ctx.message.mentions[
+                    0] if ctx.message.mentions else None
+                if ctx.author.id != YOUR_USER_ID:
+                    await ctx.send(
+                        "❌ Bạn không có quyền check-in hộ người khác.")
+                    return
 
-        for attachment in ctx.message.attachments:
-            checkin_data[today][user_id].append(attachment.url)
+        elif len(args) == 2:
+            # Trường hợp !checkin @user DD-MM-YYYY
+            member = ctx.message.mentions[0] if ctx.message.mentions else None
+            if ctx.author.id != YOUR_USER_ID:
+                await ctx.send(
+                    "❌ Bạn không có quyền check-in hộ hoặc chỉnh ngày.")
+                return
+            try:
+                d = datetime.strptime(args[1], "%d-%m-%Y")
+                checkin_date = d.strftime("%Y-%m-%d")
+            except:
+                await ctx.send(
+                    "⚠ Định dạng ngày không hợp lệ. Dùng DD-MM-YYYY.")
+                return
 
-        save_checkin(checkin_data)
+        # Nếu không có ai được tag, mặc định là chính mình
+        target = member or ctx.author
+        user_id = str(target.id)
+        username = target.display_name
+        timestamp = checkin_date + " 10:00:00"
 
-        await ctx.send(f"📸 {ctx.author.display_name} đã check-in! "
-                       f"Đã gửi {len(ctx.message.attachments)} ảnh. "
-                       f"Tổng số: {len(checkin_data[today][user_id])}")
+        add_user(user_id, username)
+        add_checkin(user_id, timestamp, image_urls)
+
+        if target == ctx.author and checkin_date == get_now().strftime(
+                "%Y-%m-%d"):
+            await ctx.send(
+                f"✅ {ctx.author.mention}, bạn đã check-in lúc `{timestamp}` thành công!"
+            )
+        elif target == ctx.author:
+            await ctx.send(
+                f"✅ Bạn đã tự check-in lùi ngày `{checkin_date}` thành công.")
+        else:
+            await ctx.send(
+                f"✅ Đã check-in hộ **{username}** cho ngày `{checkin_date}`.")
 
     @bot.command()
     async def checkin_status(ctx):
-        today = get_now().strftime("%Y-%m-%d")
-        checkin_data = load_checkin()
-        today_checkins = checkin_data.get(today, {})
+        date_str = get_now().strftime("%Y-%m-%d")
+        all_users = get_all_users()
+        checkins = get_checkin_images_by_date(date_str)
 
-        embed = discord.Embed(title=f"📌 Check-in status – {today}",
-                              color=0x3399ff,
-                              timestamp=get_now())
-        embed.set_footer(text="Ironman Check-in System")
+        embed = discord.Embed(title=f"📋 Trạng thái check-in ngày {date_str}",
+                              color=discord.Color.green())
 
-        if not today_checkins:
-            embed.description = "😴 Chưa ai check-in hôm nay."
-        else:
-            for user_id, images in today_checkins.items():
-                user = await bot.fetch_user(int(user_id))
-                name = user.display_name if user else f"<@{user_id}>"
-                value = " ".join(f"[{i}]({img})"
-                                 for i, img in enumerate(images, 1))
-                embed.add_field(name=f"{name} – {len(images)} ảnh",
-                                value=value.strip(),
+        for user_id, username in all_users.items():
+            images = checkins.get(user_id)
+            if images:
+                preview = images[0]
+                count = len(images)
+                links = " ".join(f"[{i+1}]({url})"
+                                 for i, url in enumerate(images))
+                embed.add_field(name=f"{username} – {count} ảnh",
+                                value=links or "-",
+                                inline=False)
+            else:
+                embed.add_field(name=f"{username}",
+                                value="❌ Chưa check-in hôm nay",
                                 inline=False)
 
         await ctx.send(embed=embed)

@@ -72,7 +72,6 @@ def setup_timeconfig(bot):
                 f"⚠️ Lỗi: {str(e)}.\nVí dụ:\n- `!set_time motivate 5:30 -> 23:00`\n"
                 "- `!set_time reminder 5:00`\n- `!set_time motivate loop 2`")
 
-def setup_showtime(bot):
     @bot.command(name="show_time")
     async def show_time(ctx):
         config = load_config()

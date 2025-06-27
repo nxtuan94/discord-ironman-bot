@@ -1,73 +1,59 @@
-# report.py
 import discord
-from discord.ext import commands, tasks
+from discord.ext import commands
 from utils import get_now
-from checkin import load_checkin
-from config import LOG_CHANNEL_ID
-
-
-async def generate_checkin_embeds(date_str, bot):
-    checkin_data = load_checkin()
-    checkins = checkin_data.get(date_str, {})
-    if not checkins:
-        return []
-
-    embeds = []
-    for user_id, images in checkins.items():
-        user = await bot.fetch_user(int(user_id))
-        name = user.display_name if user else f"<@{user_id}>"
-        avatar_url = user.avatar.url if user and user.avatar else user.default_avatar.url
-
-        embed = discord.Embed(title=f"{name} – {len(images)} ảnh",
-                              color=0x00cc99,
-                              timestamp=get_now())
-        embed.set_author(name=name, icon_url=avatar_url)
-        embed.set_footer(text="Ironman Check-in System")
-
-        if images:
-            embed.set_image(url=images[0])
-        if len(images) > 1:
-            links = " ".join(f"[{i+1}]({url})"
-                             for i, url in enumerate(images[1:]))
-            embed.add_field(name="Ảnh khác", value=links, inline=False)
-
-        embeds.append(embed)
-    return embeds
+from database import get_checkin_images_by_date, get_all_users
+from image_utils import create_collage_with_numbers
 
 
 def setup_report(bot):
 
     @bot.command()
     async def report_today(ctx):
+        from image_utils import create_collage_with_numbers
+
         today = get_now().strftime("%Y-%m-%d")
-        embeds = await generate_checkin_embeds(today, bot)
+        all_users = get_all_users()
+        checkin_data = get_checkin_images_by_date(today)
 
-        if not embeds:
-            await ctx.send(
-                f"📋 **Tổng hợp check-in ngày {today}**\n😴 Không ai check-in hôm nay."
-            )
-            return
+        # 1. Embed tổng quát trạng thái check-in
+        status_embed = discord.Embed(
+            title=f"📋 Trạng thái check-in ngày {today}",
+            color=discord.Color.blue(),
+            timestamp=get_now())
+        status_embed.set_footer(text="Ironman Check-in System")
 
-        await ctx.send(f"📋 **Tổng hợp check-in ngày {today}:**")
-        for embed in embeds:
-            await ctx.send(embed=embed)
+        for user_id, username in all_users.items():
+            has_checked_in = user_id in checkin_data
+            status = "✅ Đã check-in" if has_checked_in else "❌ Chưa check-in"
+            status_embed.add_field(name=username, value=status, inline=True)
 
-    @tasks.loop(minutes=1)
-    async def daily_checkin_report_loop():
-        now = get_now()
-        if now.hour == 22 and now.minute == 0:
-            channel = bot.get_channel(LOG_CHANNEL_ID)
-            if channel:
-                today = get_now().strftime("%Y-%m-%d")
-                embeds = await generate_checkin_embeds(today, bot)
-                if not embeds:
-                    await channel.send(
-                        f"📋 **Tổng hợp check-in ngày {today}**\n😴 Không ai check-in hôm nay."
-                    )
-                else:
-                    await channel.send(f"📋 **Tổng hợp check-in ngày {today}:**"
-                                       )
-                    for embed in embeds:
-                        await channel.send(embed=embed)
+        await ctx.send(embed=status_embed)
 
-    daily_checkin_report_loop.start()
+        # 2. Gửi embed riêng từng người
+        for user_id, image_urls in checkin_data.items():
+            if not image_urls:
+                continue
+
+            username = all_users.get(user_id, f"<@{user_id}>")
+            user = await ctx.bot.fetch_user(int(user_id))
+            avatar_url = user.avatar.url if user and user.avatar else user.default_avatar.url
+
+            collage_io = create_collage_with_numbers(image_urls,
+                                                     max_per_row=3,
+                                                     target_height=400)
+            if not collage_io:
+                continue
+
+            embed = discord.Embed(title=f"{username} – {len(image_urls)} ảnh",
+                                  color=discord.Color.green(),
+                                  timestamp=get_now())
+            embed.set_author(name=username, icon_url=avatar_url)
+            embed.set_footer(text="Ironman Check-in System")
+            embed.set_image(url="attachment://collage.jpg")
+
+            links = "\n".join(f"[{i+1}]({url})"
+                              for i, url in enumerate(image_urls))
+            embed.add_field(name="📸 Danh sách ảnh", value=links, inline=False)
+
+            file = discord.File(collage_io, filename="collage.jpg")
+            await ctx.send(embed=embed, file=file)
