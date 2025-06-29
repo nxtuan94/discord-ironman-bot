@@ -2,7 +2,7 @@ import discord
 from discord.ext import commands, tasks
 from utils import get_now
 from database import (get_all_users, get_user_checkin_dates, save_rank,
-                      get_ranks_for_month)
+                      get_ranks_for_month, delete_rank_cache_for_date)
 from datetime import datetime, timedelta
 from config import LOG_CHANNEL_ID
 
@@ -32,13 +32,37 @@ def analyze_streaks(dates, filter_month=None):
     for offset in range(0, 365):
         d = today - timedelta(days=offset)
         d_str = d.strftime("%Y-%m-%d")
-        if d_str in dates:
+
+        if d_str in sorted_dates:
             streak += 1
+        elif offset == 0:
+            continue  # Bỏ qua hôm nay nếu chưa check-in
         else:
             break
-    current_streak = streak
 
+    current_streak = streak
     return best_streak, current_streak
+
+
+def recalculate_month_ranks(month_prefix):
+    users = get_all_users()
+    ranks = {}
+
+    for uid in users:
+        checkin_dates = get_user_checkin_dates(uid)
+        month_dates = [d for d in checkin_dates if d.startswith(month_prefix)]
+        best, current = analyze_streaks(checkin_dates,
+                                        filter_month=month_prefix)
+        total = len(month_dates)
+
+        save_rank(month_prefix, uid, total, best, current)
+        ranks[uid] = {
+            "total": total,
+            "best_streak": best,
+            "current_streak": current
+        }
+
+    return ranks
 
 
 def format_rank_embed(title, data, users):
@@ -81,23 +105,9 @@ async def send_rank_report(ctx, arg):
         else:
             prefix = now.strftime("%Y-%m")
 
-        # thử đọc từ ranks cache
         data = get_ranks_for_month(prefix)
         if not data:
-            for uid in users:
-                checkin_dates = get_user_checkin_dates(uid)
-                month_dates = [
-                    d for d in checkin_dates if d.startswith(prefix)
-                ]
-                best, current = analyze_streaks(checkin_dates, prefix)
-                total = len(month_dates)
-                data[uid] = {
-                    "total": total,
-                    "best_streak": best,
-                    "current_streak": current
-                }
-                # Lưu vào bảng ranks
-                save_rank(prefix, uid, total, best, current)
+            data = recalculate_month_ranks(prefix)
 
         title = f"📊 BXH tháng {prefix}"
 
@@ -107,6 +117,40 @@ async def send_rank_report(ctx, arg):
 
     embed = format_rank_embed(title, data, users)
     await ctx.send(embed=embed)
+
+
+@commands.command()
+async def rank_reset(ctx, month=None):
+    from utils import get_now
+
+    if month and "-" in month:
+        try:
+            m, y = map(int, month.split("-"))
+            date_str = f"{y}-{m:02}-01"
+        except:
+            await ctx.send(
+                "⚠ Định dạng tháng không hợp lệ. Dùng dạng `MM-YYYY`.")
+            return
+    else:
+        date_str = get_now().strftime("%Y-%m-01")
+        month = get_now().strftime("%m-%Y")
+
+    delete_rank_cache_for_date(date_str)
+    await ctx.send(
+        f"✅ Đã xóa cache BXH tháng `{date_str[:7]}`. Đang tính lại...")
+    data = recalculate_month_ranks(date_str[:7])
+    users = get_all_users()
+    title = f"📊 BXH tháng {date_str[:7]}"
+    embed = format_rank_embed(title, data, users)
+    await ctx.send(embed=embed)
+
+
+def setup_rank(bot):
+    bot.add_command(rank_reset)
+
+    @bot.command()
+    async def rank(ctx, arg=None):
+        await send_rank_report(ctx, arg)
 
 
 WEEKDAY_MAP = {
@@ -128,8 +172,7 @@ def load_rank_time():
     raw_time = config.get("rank_time", "23:55")
     raw_day = config.get("rank_day", "sun")
     try:
-        time_str = raw_time.strip().split()
-        hour, minute = map(int, time_str.split(":"))
+        hour, minute = map(int, raw_time.split(":"))
         weekday = WEEKDAY_MAP[raw_day.lower()]
         return weekday, hour, minute
     except Exception as e:
@@ -137,10 +180,14 @@ def load_rank_time():
         return 6, 23, 55  # mặc định: Chủ nhật 23:55
 
 
-def setup_rank(bot):
+rank_loop = None
+
+
+def start_rank_loop(bot):
+    global rank_loop
 
     @tasks.loop(minutes=1)
-    async def weekly_rank_loop():
+    async def _loop():
         now = get_now()
         weekday, hour, minute = load_rank_time()
 
@@ -152,11 +199,6 @@ def setup_rank(bot):
             if channel:
                 await send_rank_report(channel, None)
 
-    @bot.event
-    async def on_ready():
-        if not weekly_rank_loop.is_running():
-            weekly_rank_loop.start()
-
-    @bot.command()
-    async def rank(ctx, arg=None):
-        await send_rank_report(ctx.channel, arg)
+    rank_loop = _loop
+    if not rank_loop.is_running():
+        rank_loop.start()

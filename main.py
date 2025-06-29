@@ -2,7 +2,7 @@ import discord
 import asyncio
 from discord.ext import commands, tasks
 from config import TOKEN
-from loader import setup_all
+from loader import setup_all, start_loops
 from keepalive import keep_alive
 from database import init_db
 from config import YOUR_USER_ID
@@ -19,8 +19,10 @@ restore_from_drive()
 
 @bot.event
 async def on_ready():
+
     print(f"Bot is ready as {bot.user}")
     await setup_all(bot)
+    await start_loops(bot)
     auto_backup.start()
 
 
@@ -38,6 +40,14 @@ async def backup(ctx):
     await ctx.defer()
     backup_to_drive()
     await ctx.send("✅ Đã sao lưu database lên Google Drive.")
+
+
+async def restore(ctx):
+    if ctx.author.id != YOUR_USER_ID:
+        return await ctx.send("❌ Bạn không có quyền.")
+    await ctx.defer()
+    restore_from_drive()
+    await ctx.send("✅ Đã khôi phục database từ Google Drive.")
 
 
 last_backup_date = None

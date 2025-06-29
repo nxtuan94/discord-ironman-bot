@@ -13,6 +13,7 @@ YOUR_USER_ID = int(os.getenv("YOUR_USER_ID"))
 FOLDER_ID = "1KYeF2XJnbm0aLcI_MLiL3HN2RGu6Ka6a"
 FILES = ["checkin.db", "config.json"]
 
+
 def load_config():
     if not os.path.exists(CONFIG_FILE) or os.path.getsize(CONFIG_FILE) == 0:
         return {}

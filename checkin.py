@@ -1,24 +1,60 @@
 import discord
 from discord.ext import commands
 from utils import get_now
-from database import add_user, add_checkin, get_checkin_images_by_date, get_all_users
+from database import add_user, add_checkin, get_checkin_images_by_date, get_all_users, delete_rank_cache_for_date
 from config import YOUR_USER_ID
+
+from datetime import datetime
+import re
 
 
 def setup_checkin(bot):
 
-    # Lệnh check-in
     @bot.command()
     async def checkin(ctx, *args):
         from utils import get_now
-        import re
         from datetime import datetime
+
+        if args and args[0].lower() == "status":
+            # Xử lý lệnh checkin status
+            if len(args) == 2:
+                try:
+                    d = datetime.strptime(args[1], "%d-%m-%Y")
+                    date_key = d.strftime("%Y-%m-%d")
+                except:
+                    await ctx.send(
+                        "⚠ Định dạng ngày không hợp lệ. Dùng DD-MM-YYYY.")
+                    return
+            else:
+                date_key = get_now().strftime("%Y-%m-%d")
+
+            all_users = get_all_users()
+            checkin_data = get_checkin_images_by_date(date_key)
+
+            embed = discord.Embed(
+                title=f"📋 Trạng thái check-in ngày {date_key}",
+                color=discord.Color.green())
+            embed.set_footer(text="Ironman Check-in System")
+
+            for user_id, username in all_users.items():
+                image_urls = checkin_data.get(user_id)
+                if image_urls:
+                    links = " ".join(f"[{i+1}]({url})"
+                                     for i, url in enumerate(image_urls))
+                    value = f"✅ {len(image_urls)} ảnh {links}"
+                else:
+                    value = "❌ Chưa check-in"
+                embed.add_field(name=username, value=value, inline=False)
+
+            await ctx.send(embed=embed)
+            return  # kết thúc lệnh nếu là checkin status
+
+        # ======= Phần checkin bình thường phía dưới giữ nguyên =======
 
         is_test = False
         if args and args[0].lower() == "test":
             is_test = True
-            args = args[
-                1:]  # Loại bỏ từ "test" khỏi args để xử lý như bình thường
+            args = args[1:]
 
         image_urls = []
         if not is_test:
@@ -31,13 +67,11 @@ def setup_checkin(bot):
                 await ctx.send("⚠ Bạn cần gửi ít nhất 1 ảnh để check-in.")
                 return
 
-        # Phân tích args
         member = None
         checkin_date = get_now().strftime("%Y-%m-%d")
         checkin_time = get_now().strftime("%H:%M:%S")
 
         if len(args) == 1:
-            # Trường hợp !checkin DD-MM-YYYY (tự checkin lùi ngày)
             if re.match(r"\d{2}-\d{2}-\d{4}", args[0]):
                 if ctx.author.id != YOUR_USER_ID:
                     await ctx.send("❌ Bạn không có quyền check-in lùi ngày.")
@@ -50,7 +84,6 @@ def setup_checkin(bot):
                         "⚠ Định dạng ngày không hợp lệ. Dùng DD-MM-YYYY.")
                     return
             else:
-                # Trường hợp !checkin @user
                 member = ctx.message.mentions[
                     0] if ctx.message.mentions else None
                 if ctx.author.id != YOUR_USER_ID:
@@ -59,7 +92,6 @@ def setup_checkin(bot):
                     return
 
         elif len(args) == 2:
-            # Trường hợp !checkin @user DD-MM-YYYY
             member = ctx.message.mentions[0] if ctx.message.mentions else None
             if ctx.author.id != YOUR_USER_ID:
                 await ctx.send(
@@ -73,55 +105,19 @@ def setup_checkin(bot):
                     "⚠ Định dạng ngày không hợp lệ. Dùng DD-MM-YYYY.")
                 return
 
-        # Nếu không có ai được tag, mặc định là chính mình
         target = member or ctx.author
         user_id = str(target.id)
         username = target.display_name
-        timestamp = checkin_date + " - " + checkin_time
+        timestamp = f"{checkin_date} {checkin_time}"
 
         if not is_test:
             add_user(user_id, username)
             add_checkin(user_id, timestamp, image_urls)
 
-        if is_test:
-            await ctx.send(
-                f"🧪 [TEST] Giả lập check-in cho **{username}** tại `{timestamp}` thành công! (Không lưu dữ liệu)"
-            )
-        elif target == ctx.author and checkin_date == get_now().strftime(
-                "%Y-%m-%d"):
-            await ctx.send(
-                f"✅ {ctx.author.mention}, bạn đã check-in lúc `{timestamp}` thành công!"
-            )
-        elif target == ctx.author:
-            await ctx.send(
-                f"✅ Bạn đã tự check-in lùi ngày `{checkin_date}` thành công.")
-        else:
-            await ctx.send(
-                f"✅ Đã check-in hộ **{username}** cho ngày `{checkin_date}`.")
+            today_str = get_now().strftime("%Y-%m-%d")
+            if checkin_date != today_str:
+                delete_rank_cache_for_date(checkin_date)
 
-    # Lệnh kiểm tra trạng thái check-in
-    @bot.command()
-    async def checkin_status(ctx):
-        date_str = get_now().strftime("%Y-%m-%d")
-        all_users = get_all_users()
-        checkins = get_checkin_images_by_date(date_str)
-
-        embed = discord.Embed(title=f"📋 Trạng thái check-in ngày {date_str}",
-                              color=discord.Color.green())
-
-        for user_id, username in all_users.items():
-            images = checkins.get(user_id)
-            if images:
-                preview = images[0]
-                count = len(images)
-                links = " ".join(f"[{i+1}]({url})"
-                                 for i, url in enumerate(images))
-                embed.add_field(name=f"{username} – {count} ảnh",
-                                value=links or "-",
-                                inline=False)
-            else:
-                embed.add_field(name=f"{username}",
-                                value="❌ Chưa check-in hôm nay",
-                                inline=False)
-
-        await ctx.send(embed=embed)
+        await ctx.send(
+            f"✅ Đã check-in thành công cho {target.display_name} vào ngày {checkin_date}."
+        )
