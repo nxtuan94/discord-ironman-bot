@@ -10,7 +10,8 @@ TOKEN = os.getenv("DISCORD_TOKEN")
 CHANNEL_ID = int(os.getenv("DISCORD_CHANNEL_ID"))
 LOG_CHANNEL_ID = int(os.getenv("CHECKIN_LOG_CHANNEL_ID"))
 YOUR_USER_ID = int(os.getenv("YOUR_USER_ID"))
-
+FOLDER_ID = "1KYeF2XJnbm0aLcI_MLiL3HN2RGu6Ka6a"
+FILES = ["checkin.db", "config.json"]
 
 def load_config():
     if not os.path.exists(CONFIG_FILE) or os.path.getsize(CONFIG_FILE) == 0:

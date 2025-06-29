@@ -1,4 +1,7 @@
 .env
-checkin.json
+checkin.db
 config.json
+client_secret.json
+token_drive_base64.txt
+token_drive.pickle
 __pycache__/

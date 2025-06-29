@@ -7,26 +7,34 @@ from config import YOUR_USER_ID
 
 def setup_checkin(bot):
 
+    # Lệnh check-in
     @bot.command()
     async def checkin(ctx, *args):
         from utils import get_now
-        from database import add_user, add_checkin
         import re
         from datetime import datetime
 
-        image_urls = []
-        for attachment in ctx.message.attachments:
-            if attachment.content_type and attachment.content_type.startswith(
-                    "image/"):
-                image_urls.append(attachment.url)
+        is_test = False
+        if args and args[0].lower() == "test":
+            is_test = True
+            args = args[
+                1:]  # Loại bỏ từ "test" khỏi args để xử lý như bình thường
 
-        if not image_urls:
-            await ctx.send("⚠ Bạn cần gửi ít nhất 1 ảnh để check-in.")
-            return
+        image_urls = []
+        if not is_test:
+            for attachment in ctx.message.attachments:
+                if attachment.content_type and attachment.content_type.startswith(
+                        "image/"):
+                    image_urls.append(attachment.url)
+
+            if not image_urls:
+                await ctx.send("⚠ Bạn cần gửi ít nhất 1 ảnh để check-in.")
+                return
 
         # Phân tích args
         member = None
         checkin_date = get_now().strftime("%Y-%m-%d")
+        checkin_time = get_now().strftime("%H:%M:%S")
 
         if len(args) == 1:
             # Trường hợp !checkin DD-MM-YYYY (tự checkin lùi ngày)
@@ -69,12 +77,17 @@ def setup_checkin(bot):
         target = member or ctx.author
         user_id = str(target.id)
         username = target.display_name
-        timestamp = checkin_date + " 10:00:00"
+        timestamp = checkin_date + " - " + checkin_time
 
-        add_user(user_id, username)
-        add_checkin(user_id, timestamp, image_urls)
+        if not is_test:
+            add_user(user_id, username)
+            add_checkin(user_id, timestamp, image_urls)
 
-        if target == ctx.author and checkin_date == get_now().strftime(
+        if is_test:
+            await ctx.send(
+                f"🧪 [TEST] Giả lập check-in cho **{username}** tại `{timestamp}` thành công! (Không lưu dữ liệu)"
+            )
+        elif target == ctx.author and checkin_date == get_now().strftime(
                 "%Y-%m-%d"):
             await ctx.send(
                 f"✅ {ctx.author.mention}, bạn đã check-in lúc `{timestamp}` thành công!"
@@ -86,6 +99,7 @@ def setup_checkin(bot):
             await ctx.send(
                 f"✅ Đã check-in hộ **{username}** cho ngày `{checkin_date}`.")
 
+    # Lệnh kiểm tra trạng thái check-in
     @bot.command()
     async def checkin_status(ctx):
         date_str = get_now().strftime("%Y-%m-%d")
