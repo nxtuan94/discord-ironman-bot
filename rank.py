@@ -94,14 +94,23 @@ async def send_rank_report(ctx, arg):
     if arg == "all":
         for uid in users:
             checkin_dates = get_user_checkin_dates(uid)
+
+            # Tính best và current streak như cũ
             best, current = analyze_streaks(checkin_dates)
-            total = len(checkin_dates)
+
+            # Đếm số ngày check-in duy nhất
+            unique_days = set(
+                datetime.strptime(d, "%Y-%m-%d").date().isoformat()
+                for d in checkin_dates
+            )
+            total = len(unique_days)
+
             data[uid] = {
                 "total": total,
                 "best_streak": best,
                 "current_streak": current
             }
-        title = "📊 BẢNG XẾP HẠNG TỔNG THỂ"
+        title = "📊 BẢNG XẾP HẠNG TỔNG"
 
     else:
         if arg and "-" in arg:
@@ -127,6 +136,7 @@ async def send_rank_report(ctx, arg):
 
     embed = format_rank_embed(title, data, users)
     await ctx.send(embed=embed)
+
 
 
 @commands.command()
