@@ -50,10 +50,20 @@ def recalculate_month_ranks(month_prefix):
 
     for uid in users:
         checkin_dates = get_user_checkin_dates(uid)
+
+        # Lọc những ngày nằm trong tháng cần tính
         month_dates = [d for d in checkin_dates if d.startswith(month_prefix)]
-        best, current = analyze_streaks(checkin_dates,
-                                        filter_month=month_prefix)
-        total = len(month_dates)
+
+        # Chuyển về định dạng ngày và loại bỏ trùng lặp
+        month_days = set(
+            datetime.strptime(d, "%Y-%m-%d").date().isoformat()
+            for d in month_dates
+        )
+
+        # Tính streak như cũ
+        best, current = analyze_streaks(checkin_dates, filter_month=month_prefix)
+
+        total = len(month_days)
 
         save_rank(month_prefix, uid, total, best, current)
         ranks[uid] = {
