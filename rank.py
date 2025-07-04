@@ -17,11 +17,12 @@ def analyze_streaks(dates, filter_month=None):
     if filter_month:
         sorted_dates = [d for d in sorted_dates if d.strftime("%Y-%m") == filter_month]
 
-    best_streak = current_streak = 0
+    # Tính best streak
+    best_streak = 0
     streak = 1
     for i in range(1, len(sorted_dates)):
-        prev = datetime.strptime(sorted_dates[i - 1], "%Y-%m-%d")
-        curr = datetime.strptime(sorted_dates[i], "%Y-%m-%d")
+        prev = sorted_dates[i - 1]
+        curr = sorted_dates[i]
         if (curr - prev).days == 1:
             streak += 1
         else:
@@ -29,22 +30,21 @@ def analyze_streaks(dates, filter_month=None):
             streak = 1
     best_streak = max(best_streak, streak) if sorted_dates else 0
 
-    # Current streak
+    # Tính current streak (tính ngược từ hôm nay)
     today = get_now().date()
     streak = 0
     for offset in range(0, 365):
         d = today - timedelta(days=offset)
-        d_str = d.strftime("%Y-%m-%d")
-
-        if d_str in sorted_dates:
+        if d in sorted_dates:
             streak += 1
         elif offset == 0:
-            continue  # Bỏ qua hôm nay nếu chưa check-in
+            continue  # bỏ qua nếu chưa check-in hôm nay
         else:
             break
-
     current_streak = streak
+
     return best_streak, current_streak
+
 
 
 def recalculate_month_ranks(month_prefix):
