@@ -8,13 +8,16 @@ from config import LOG_CHANNEL_ID
 
 
 def analyze_streaks(dates, filter_month=None):
-    sorted_dates = sorted(dates)
-    best_streak = current_streak = 0
+    # Chuyển tất cả sang datetime.date và loại trùng
+    sorted_dates = sorted(set(
+        datetime.strptime(d[:10], "%Y-%m-%d").date()
+        for d in dates if len(d) >= 10
+    ))
 
     if filter_month:
-        sorted_dates = [d for d in sorted_dates if d.startswith(filter_month)]
+        sorted_dates = [d for d in sorted_dates if d.strftime("%Y-%m") == filter_month]
 
-    # Best streak
+    best_streak = current_streak = 0
     streak = 1
     for i in range(1, len(sorted_dates)):
         prev = datetime.strptime(sorted_dates[i - 1], "%Y-%m-%d")
