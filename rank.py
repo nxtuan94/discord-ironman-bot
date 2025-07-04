@@ -214,10 +214,13 @@ def start_rank_loop(bot):
         now = get_now()
         weekday, hour, minute = load_rank_time()
 
-        if now.weekday(
-        ) == weekday and now.hour == hour and now.minute == minute:
-            # ID của kênh bạn muốn gửi report vào (ví dụ: #general)
-            channel_id = LOG_CHANNEL_ID  # <-- Thay bằng ID thật
+        if now.weekday() == weekday and now.hour == hour and now.minute == minute:
+            # ✅ Tính lại bảng xếp hạng của tháng hiện tại trước khi gửi báo cáo
+            prefix = now.strftime("%Y-%m")
+            recalculate_month_ranks(prefix)
+
+            # Gửi báo cáo
+            channel_id = LOG_CHANNEL_ID
             channel = bot.get_channel(channel_id)
             if channel:
                 await send_rank_report(channel, None)
